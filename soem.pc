@@ -1,0 +1,11 @@
+#remove_this_comment -> .pc file for ubuntu pkg-config that allows to use soem libraries in your custom project
+prefix=/usr/local
+exec_prefix=${prefix}  # defining another variable in terms of the first
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: soem                          # human-readable name
+Description: Simple Open EtherCAT Master Library # human-readable description
+Version: @SOEM_VERSION@
+Libs: -lsoem -lpthread -L${libdir}
+Cflags: -I${includedir}  -I${includedir}/soem

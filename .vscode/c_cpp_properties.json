@@ -4,7 +4,8 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
-                "/usr/local/include/soem/**"
+                "/usr/local/include/soem/**",
+                "/usr/include/soem/**"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",
