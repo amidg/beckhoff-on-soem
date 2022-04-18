@@ -128,10 +128,6 @@ bool requestAllSlavesToOPSTATE() {
     /* wait for all slaves to reach OP state */
     ec_statecheck(0, EC_STATE_OPERATIONAL, EC_TIMEOUTSTATE);
 
-    while (ec_slave[0].state != EC_STATE_OPERATIONAL) {
-        // wait for all slaves to respond with OP STATE
-    }
-
     printf(" done \n\n");
     return true;
 }
@@ -179,6 +175,12 @@ void testProgram(int* slaveTree) {
         //setDigitalOutput(EL2008, 0, HIGH);
     }
 }
+
+/*
+    build with 
+    g++ beckhoff-on-soem.cpp -o beckhoff-on-soem -g `pkg-config --libs --cflags soem`
+
+*/
 
 int main(int argc, char* argv[]) { // argv[0] is the 
     // 1. initialize slave devices on the specified ethernet port
