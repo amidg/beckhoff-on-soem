@@ -15,13 +15,14 @@ enum DigitalInterface {
 };
 
 // slave definitions
-int predefinedSlaveList[NUMBER_OF_SLAVES] = {EK1100, EL1008, EL2008};
+int predefinedSlaveList[NUMBER_OF_SLAVES] = {tree_EK1100, tree_EL1008, tree_EL2008};
 
-EL1008_slave EL1008_device;
+EL1008 EL1008_1;
 
 // prog definitions
 bool requestSlaveInfo = false;;
 char ethName[1024];
+volatile int wkc;
 char IOmap[4096];
 
 // functions
@@ -80,8 +81,8 @@ void readSlaves(bool showSlaveInfo) {
 void showSlaveTree(bool successInit) {
     switch (successInit) {
     case true:
-        cout << ec_slave[EK1100].name << " (" << EK1100 << ") " << endl;
-        for (int i = EK1100 + 1; i < LastSlave; i++) {
+        cout << ec_slave[tree_EK1100].name << " (" << tree_EK1100 << ") " << endl;
+        for (int i = tree_EK1100 + 1; i < LastSlave; i++) {
             cout << "|--(" << i << ")--> " << ec_slave[i].name << ": " << "Output [bits]: " << ec_slave[i].Obits << " Input [bits]: " << ec_slave[i].Ibits << endl;
         }
         break;
@@ -115,8 +116,9 @@ bool initSlaves(char* portName, bool requestSlaveInfo) { //initiate slaves
 }
 
 bool requestAllSlavesToOPSTATE() {
+    bool slavesInOpState = false;
     printf("\n...setting all slaves to OP STATE...");
-    ec_slave[0].state = EC_STATE_OPERATIONAL;
+    ec_slave[0].state = 0x08;
 
     /* send one valid process data to make outputs in slaves happy*/
     ec_send_processdata();
@@ -126,10 +128,34 @@ bool requestAllSlavesToOPSTATE() {
     ec_writestate(0);
     
     /* wait for all slaves to reach OP state */
-    ec_statecheck(0, EC_STATE_OPERATIONAL, EC_TIMEOUTSTATE);
+    while ( !slavesInOpState ) {
+        for (int i = tree_EK1100 - 1; i < LastSlave; i++) {
+            ec_slave[i].state = 0x08;
+        }
+
+        ec_send_processdata();
+        ec_receive_processdata(EC_TIMEOUTRET);
+        ec_statecheck(0, EC_STATE_OPERATIONAL, EC_TIMEOUTSTATE);
+
+        slavesInOpState = true;
+        for (int i = tree_EK1100 - 1; i < LastSlave; i++) {
+            slavesInOpState = slavesInOpState && (ec_slave[i].state == 0x08);
+            cout << ".";
+        }
+    }
 
     printf(" done \n\n");
     return true;
+}
+
+uint8_t* uint8ToBinaryArray(uint8_t input) {
+    static uint8_t result[8]; //smallest size array of 8 bit
+
+    for (int iter = 7; iter >= 0; iter--) {
+        result[iter] = ( unsigned(input & el1008_mask[iter]) > unsigned(0) ) ? 1 : 0;
+    }
+
+    return result;
 }
 
 void setDigitalOutput(uint32 slaveNumber, uint8 moduleIndex, bool value) {
@@ -137,10 +163,7 @@ void setDigitalOutput(uint32 slaveNumber, uint8 moduleIndex, bool value) {
 
     /* Move pointer to correct module index*/
     //data_ptr += moduleIndex * 2;
-
-    for (int i = 0; i < 8; i++) {
-        cout << startbit << endl;
-    }
+    cout << "start bit at slave " << ec_slave[slaveNumber].name << ": " << startbit << endl;
 
     // Read value byte by byte since all targets can't handle misaligned addresses
     switch (value) {
@@ -153,26 +176,53 @@ void setDigitalOutput(uint32 slaveNumber, uint8 moduleIndex, bool value) {
     }
 }
 
-uint8_t readDigitalInput (uint16 slaveNumber, uint8 moduleIndex)
-{
-   /* Get the the startbit position in slaves IO byte */
-   uint8 startbit = ec_slave[slaveNumber].Istartbit;
-   //cout << startbit << endl;
-   /* Mask bit and return boolean 0 or 1 */
-   if ( *ec_slave[slaveNumber].inputs & (1 << (moduleIndex - 1  + startbit)) )
-      return 1;
-   else
-      return 0;
-}
+// bool readDigitalInput8bit(uint32_t slaveNumber, int8_t moduleIndex) {
+//     bool result = LOW;
+//     uint8_t value[8];
+//     value = uint8ToBinary(ec_slave[slaveNumber].inputs[0]);
 
-void testProgram(int* slaveTree) {
+//     cout << unsigned(value[moduleIndex]) << endl;
+
+//     if ( moduleIndex > 9 ) { return 0; };
+
+//     for(int i = 7; i >= 0; i++) {
+//         // result = ( unsigned(value[moduleIndex - 1]) == 1 ) ? HIGH : LOW;
+//         // printf("%d", result);
+//     }
+
+//     return result;
+// }
+
+// bool readEL1008(uint32_t slaveNumber, int moduleIndex) {
+//     bool result = LOW;
+
+//     static uint8_t iovalue[8]; //smallest size array of 8 bit
+
+//     for (int iter = 7; iter >= 0; iter--) {
+//         iovalue[iter] = ( unsigned(ec_slave[slaveNumber].inputs[0] & el1008_mask[iter]) > unsigned(0) ) ? 1 : 0;
+//     }
+
+
+//     for (int i = 7; i >= 0; i--) {
+//         result = ( unsigned(iovalue[moduleIndex]) == unsigned(1) ) ? HIGH : LOW;
+//     }
+    
+
+//     // for(int i = 7; i >= 0; i++) {
+//     //     // result = ( unsigned(value[moduleIndex - 1]) == 1 ) ? HIGH : LOW;
+//     //     // printf("%d", result);
+//     // }
+
+//     return result;
+// }
+
+void testProgram(int* slaveTree) { 
     while (true) {
-        EL1008_device.in1 = readDigitalInput(EL1008, 1);
-        cout << EL1008_device.in1 << endl;
-    }
-    for (int i = 1; i < LastSlave; i++) {
-        cout << ec_slave[i].Ostartbit << endl;
-        //setDigitalOutput(EL2008, 0, HIGH);
+        ec_send_processdata();
+        wkc = ec_receive_processdata(EC_TIMEOUTRET);
+
+        printf("%d \n", readEL1008(tree_EL1008, 2));
+
     }
 }
 
@@ -195,10 +245,10 @@ int main(int argc, char* argv[]) { // argv[0] is the
         }
     }
 
-    if (!initSlaves(ethName, requestSlaveInfo)) { return 0; };
+    if (!initSlaves(ethName, requestSlaveInfo)) { return 0; }; // here all slaves must be at 0x04 state -> SAFEOP STATE
 
     // 2. set all devies to OP STATE prior running them
-    if ( !requestAllSlavesToOPSTATE() ) { return 0; }; 
+    if ( !requestAllSlavesToOPSTATE() ) { return 0; };  // all slaves must be in 0x08 state -> OP STATE
 
     // 3. run simple program
     testProgram(predefinedSlaveList);
