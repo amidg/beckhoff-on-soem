@@ -150,35 +150,47 @@ bool requestAllSlavesToOPSTATE() {
 
 uint8_t* uint8ToBinaryArray(uint8_t input) {
     static uint8_t result[8]; //smallest size array of 8 bit
-
-    for (int iter = 7; iter >= 0; iter--) {
-        result[iter] = ( unsigned(input & el1008_mask[iter]) > unsigned(0) ) ? 1 : 0;
+    static int intInput = unsigned(input); // upscale type casting not too efficient but should work
+    for (int i = 7; i >= 0 || intInput != 0; i--) {
+        result[i] = ( intInput % 2 == 0) ? 1 : 0; 
+        intInput /= 2;
     }
 
     return result;
 }
 
-void setDigitalOutput(uint32 slaveNumber, uint8 moduleIndex, bool value) {
-    uint8 startbit = ec_slave[slaveNumber].Ostartbit;
+uint8_t* uint8ToBinaryArrayUsingBitMasking(uint8_t input) {
+    static uint8_t result[8]; //smallest size array of 8 bit
 
-    /* Move pointer to correct module index*/
-    //data_ptr += moduleIndex * 2;
-    cout << "start bit at slave " << ec_slave[slaveNumber].name << ": " << startbit << endl;
-
-    // Read value byte by byte since all targets can't handle misaligned addresses
-    switch (value) {
-    case HIGH:  // set digital output as HIGH
-        *ec_slave[slaveNumber].outputs |= (1 << (moduleIndex - 1 + startbit));
-        break;
-    case LOW: // set digital output as LOW
-        *ec_slave[slaveNumber].outputs &= ~(1 << (moduleIndex - 1 + startbit));
-        break;
+    for (int iter = 7; iter >= 0; iter--) {
+        result[iter] = ( unsigned(input & el1008_mask[iter]) > 0 ) ? 1 : 0;
     }
+
+    return result;
 }
 
-bool readDigitalInput8bit(uint32_t slaveNumber, int8_t moduleIndex) {
+void digitalWrite8bit(uint32_t slaveNumber, uint8 moduleIndex, bool value) {
+    
+    // static uint8_t control[8];
+    // moduleIndex = 7 - (moduleIndex - 1);
+
+    // ec_slave[slaveNumber].outputs
+
+    // // Read value byte by byte since all targets can't handle misaligned addresses
+    // switch (value) {
+    // case HIGH:  // set digital output as HIGH
+    //     *ec_slave[slaveNumber].outputs |= (1 << (moduleIndex - 1 + startbit));
+    //     break;
+    // case LOW: // set digital output as LOW
+    //     *ec_slave[slaveNumber].outputs &= ~(1 << (moduleIndex - 1 + startbit));
+    //     break;
+    // }
+}
+
+bool digitalRead8bit(uint32_t slaveNumber, int8_t moduleIndex) {
     uint8_t* value;
-    value = uint8ToBinaryArray(ec_slave[slaveNumber].inputs[0]);
+    // value = uint8ToBinaryArray(ec_slave[slaveNumber].inputs[0]);
+    value = uint8ToBinaryArray(*ec_slave[slaveNumber].inputs);
 
     if ( moduleIndex > 9 ) { return 0; };
 
@@ -190,7 +202,7 @@ void testProgram(int* slaveTree) {
         ec_send_processdata();
         wkc = ec_receive_processdata(EC_TIMEOUTRET);
 
-        printf("%d \n", readDigitalInput8bit(tree_EL1008, 8));
+        printf("%d \n", digitalRead8bit(tree_EL1008, 8));
 
     }
 }
