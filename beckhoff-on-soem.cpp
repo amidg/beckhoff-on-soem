@@ -185,29 +185,6 @@ bool readDigitalInput8bit(uint32_t slaveNumber, int8_t moduleIndex) {
     return ( unsigned(value[7 - (moduleIndex - 1)]) == 1 ) ? HIGH : LOW;
 }
 
-// bool readEL1008(uint32_t slaveNumber, int moduleIndex) {
-//     bool result = LOW;
-
-//     static uint8_t iovalue[8]; //smallest size array of 8 bit
-
-//     for (int iter = 7; iter >= 0; iter--) {
-//         iovalue[iter] = ( unsigned(ec_slave[slaveNumber].inputs[0] & el1008_mask[iter]) > unsigned(0) ) ? 1 : 0;
-//     }
-
-
-//     for (int i = 7; i >= 0; i--) {
-//         result = ( unsigned(iovalue[moduleIndex]) == unsigned(1) ) ? HIGH : LOW;
-//     }
-    
-
-//     // for(int i = 7; i >= 0; i++) {
-//     //     // result = ( unsigned(value[moduleIndex - 1]) == 1 ) ? HIGH : LOW;
-//     //     // printf("%d", result);
-//     // }
-
-//     return result;
-// }
-
 void testProgram(int* slaveTree) { 
     while (true) {
         ec_send_processdata();
@@ -220,7 +197,7 @@ void testProgram(int* slaveTree) {
 
 /*
     build with 
-    g++ beckhoff-on-soem.cpp -o beckhoff-on-soem -g `pkg-config --libs --cflags soem`
+    g++ beckhoff-on-soem.cpp -o demo-arm64 -g `pkg-config --libs --cflags soem`
 
 */
 
