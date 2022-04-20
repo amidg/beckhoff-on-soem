@@ -5,6 +5,8 @@
 #include "slavelist.h"
 #include <inttypes.h>
 #include <soem/ethercat.h>
+#include <chrono>
+#include <thread>
 
 using namespace std;
 
@@ -169,27 +171,21 @@ uint8_t* uint8ToBinaryArrayUsingBitMasking(uint8_t input) {
     return result;
 }
 
-void digitalWrite8bit(uint32_t slaveNumber, uint8 moduleIndex, bool value) {
-    
-    // static uint8_t control[8];
-    // moduleIndex = 7 - (moduleIndex - 1);
-
-    // ec_slave[slaveNumber].outputs
-
-    // // Read value byte by byte since all targets can't handle misaligned addresses
-    // switch (value) {
-    // case HIGH:  // set digital output as HIGH
-    //     *ec_slave[slaveNumber].outputs |= (1 << (moduleIndex - 1 + startbit));
-    //     break;
-    // case LOW: // set digital output as LOW
-    //     *ec_slave[slaveNumber].outputs &= ~(1 << (moduleIndex - 1 + startbit));
-    //     break;
-    // }
+void digitalWrite(uint32_t slaveNumber, uint8 moduleIndex, bool value) {    
+    if (moduleIndex <= 8) {
+        switch (value) {
+        case HIGH:
+            *ec_slave[slaveNumber].outputs |= ( 1 << (moduleIndex - 1) ); // 00000001 << how many times move 1 to left register
+            break;
+        case LOW:
+            *ec_slave[slaveNumber].outputs &= ( 1 << (moduleIndex - 1) );
+            break;
+        }
+    }
 }
 
-bool digitalRead8bit(uint32_t slaveNumber, int8_t moduleIndex) {
+bool digitalRead(uint32_t slaveNumber, int8_t moduleIndex) {
     uint8_t* value;
-    // value = uint8ToBinaryArray(ec_slave[slaveNumber].inputs[0]);
     value = uint8ToBinaryArray(*ec_slave[slaveNumber].inputs);
 
     if ( moduleIndex > 9 ) { return 0; };
@@ -202,8 +198,10 @@ void testProgram(int* slaveTree) {
         ec_send_processdata();
         wkc = ec_receive_processdata(EC_TIMEOUTRET);
 
-        printf("%d \n", digitalRead8bit(tree_EL1008, 8));
+        printf("%d \n", digitalRead(tree_EL1008, 8));
 
+        //*ec_slave[tree_EL2008].outputs = 2;
+        digitalWrite(tree_EL2008, 4, HIGH);
     }
 }
 
