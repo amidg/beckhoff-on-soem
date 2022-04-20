@@ -176,22 +176,14 @@ void setDigitalOutput(uint32 slaveNumber, uint8 moduleIndex, bool value) {
     }
 }
 
-// bool readDigitalInput8bit(uint32_t slaveNumber, int8_t moduleIndex) {
-//     bool result = LOW;
-//     uint8_t value[8];
-//     value = uint8ToBinary(ec_slave[slaveNumber].inputs[0]);
+bool readDigitalInput8bit(uint32_t slaveNumber, int8_t moduleIndex) {
+    uint8_t* value;
+    value = uint8ToBinaryArray(ec_slave[slaveNumber].inputs[0]);
 
-//     cout << unsigned(value[moduleIndex]) << endl;
+    if ( moduleIndex > 9 ) { return 0; };
 
-//     if ( moduleIndex > 9 ) { return 0; };
-
-//     for(int i = 7; i >= 0; i++) {
-//         // result = ( unsigned(value[moduleIndex - 1]) == 1 ) ? HIGH : LOW;
-//         // printf("%d", result);
-//     }
-
-//     return result;
-// }
+    return ( unsigned(value[7 - (moduleIndex - 1)]) == 1 ) ? HIGH : LOW;
+}
 
 // bool readEL1008(uint32_t slaveNumber, int moduleIndex) {
 //     bool result = LOW;
@@ -221,7 +213,7 @@ void testProgram(int* slaveTree) {
         ec_send_processdata();
         wkc = ec_receive_processdata(EC_TIMEOUTRET);
 
-        printf("%d \n", readEL1008(tree_EL1008, 2));
+        printf("%d \n", readDigitalInput8bit(tree_EL1008, 8));
 
     }
 }
