@@ -3,6 +3,7 @@
         "cstddef": "cpp",
         "stdio.h": "c",
         "ostream": "cpp",
-        "iostream": "cpp"
+        "iostream": "cpp",
+        "thread": "cpp"
     }
 }

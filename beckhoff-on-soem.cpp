@@ -5,8 +5,10 @@
 #include "slavelist.h"
 #include <inttypes.h>
 #include <soem/ethercat.h>
-#include <chrono>
-#include <thread>
+#include <time.h>
+#include <pthread.h>
+#include <sys/time.h>
+#include <sched.h>
 
 using namespace std;
 
@@ -193,15 +195,29 @@ bool digitalRead(uint32_t slaveNumber, int8_t moduleIndex) {
     return ( unsigned(value[7 - (moduleIndex - 1)]) == 1 ) ? HIGH : LOW;
 }
 
-void testProgram(int* slaveTree) { 
+OSAL_THREAD_FUNC_RT ecat_write_io() {
+    bool turnonall = true;
+    int i = 1;
     while (true) {
+        turnonall = ( turnonall && (i < 9) ) || ( !turnonall && (i == 1) );
+        switch (turnonall) {
+        case true:  
+            digitalWrite(tree_EL2008, i, HIGH);
+            if (i < 8) { i++; };
+            break;            
+        case false:
+            digitalWrite(tree_EL2008, i, LOW);
+            if (i > 1) { i--; };
+            break;
+        }
         ec_send_processdata();
-        wkc = ec_receive_processdata(EC_TIMEOUTRET);
+    }
+}
 
-        printf("%d \n", digitalRead(tree_EL1008, 8));
-
-        //*ec_slave[tree_EL2008].outputs = 2;
-        digitalWrite(tree_EL2008, 4, HIGH);
+OSAL_THREAD_FUNC_RT ecat_read_io() {
+    for (int i = 1; i <= 8; i++) {
+        ec_send_processdata();
+        printf("Value at bit %d is %d \n", i, digitalRead(tree_EL1008, i));
     }
 }
 
@@ -213,6 +229,7 @@ void testProgram(int* slaveTree) {
 
 int main(int argc, char* argv[]) { // argv[0] is the 
     // 1. initialize slave devices on the specified ethernet port
+    int ctime = 1000; // 1000us = 1ms
     switch (argc) {
     case 1:
         cout << "no eth port provided" << endl;
@@ -230,7 +247,10 @@ int main(int argc, char* argv[]) { // argv[0] is the
     if ( !requestAllSlavesToOPSTATE() ) { return 0; };  // all slaves must be in 0x08 state -> OP STATE
 
     // 3. run simple program
-    testProgram(predefinedSlaveList);
+    pthread_t thread1, thread2;
+    osal_thread_create_rt(&thread1, 1024, ecat_read_io, (void*) &ctime);
+
+    osal_thread_create_rt(&thread2, 1024, ecat_write_io, (void*) &ctime);
 
     return 0;
 }
