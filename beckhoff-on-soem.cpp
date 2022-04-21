@@ -21,7 +21,7 @@ enum DigitalInterface {
 // slave definitions
 int predefinedSlaveList[NUMBER_OF_SLAVES] = {tree_EK1100, tree_EL1008, tree_EL2008};
 
-EL1008 EL1008_1;
+pthread_t thread1, thread2;
 
 // prog definitions
 bool requestSlaveInfo = false;;
@@ -163,16 +163,6 @@ uint8_t* uint8ToBinaryArray(uint8_t input) {
     return result;
 }
 
-uint8_t* uint8ToBinaryArrayUsingBitMasking(uint8_t input) {
-    static uint8_t result[8]; //smallest size array of 8 bit
-
-    for (int iter = 7; iter >= 0; iter--) {
-        result[iter] = ( unsigned(input & el1008_mask[iter]) > 0 ) ? 1 : 0;
-    }
-
-    return result;
-}
-
 void digitalWrite(uint32_t slaveNumber, uint8 moduleIndex, bool value) {    
     if (moduleIndex <= 8) {
         switch (value) {
@@ -198,6 +188,7 @@ bool digitalRead(uint32_t slaveNumber, int8_t moduleIndex) {
 OSAL_THREAD_FUNC_RT ecat_write_io() {
     bool turnonall = true;
     int i = 1;
+    ec_send_processdata();
     while (true) {
         turnonall = ( turnonall && (i < 9) ) || ( !turnonall && (i == 1) );
         switch (turnonall) {
@@ -215,17 +206,21 @@ OSAL_THREAD_FUNC_RT ecat_write_io() {
 }
 
 OSAL_THREAD_FUNC_RT ecat_read_io() {
-    for (int i = 1; i <= 8; i++) {
-        ec_send_processdata();
-        printf("Value at bit %d is %d \n", i, digitalRead(tree_EL1008, i));
+    while (true) {
+        for (int i = 1; i <= 8; i++) {
+            ec_send_processdata();
+            printf("Value at bit %d is %d \n", i, digitalRead(tree_EL1008, i));
+        }
     }
 }
 
 /*
     build with 
-    g++ beckhoff-on-soem.cpp -o demo-arm64 -g `pkg-config --libs --cflags soem`
+    g++ -lpthread beckhoff-on-soem.cpp -o demo-arm64 -g `pkg-config --libs --cflags soem`
 
 */
+
+int ecat_read_rt_result, ecat_write_rt_result;
 
 int main(int argc, char* argv[]) { // argv[0] is the 
     // 1. initialize slave devices on the specified ethernet port
@@ -247,10 +242,15 @@ int main(int argc, char* argv[]) { // argv[0] is the
     if ( !requestAllSlavesToOPSTATE() ) { return 0; };  // all slaves must be in 0x08 state -> OP STATE
 
     // 3. run simple program
-    pthread_t thread1, thread2;
-    osal_thread_create_rt(&thread1, 1024, ecat_read_io, (void*) &ctime);
+    ecat_read_rt_result = osal_thread_create_rt(&thread1, 1024, ecat_read_io, (void*)&ctime);
+    if ( !ecat_read_rt_result ) {
+        return 0;
+    }
 
-    osal_thread_create_rt(&thread2, 1024, ecat_write_io, (void*) &ctime);
+    ecat_write_rt_result = osal_thread_create_rt(&thread2, 1024, ecat_write_io, (void*)&ctime);
+    if ( !ecat_write_rt_result ) {
+        return 0;
+    }
 
     return 0;
 }
