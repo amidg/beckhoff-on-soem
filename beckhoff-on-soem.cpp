@@ -153,9 +153,9 @@ bool requestAllSlavesToOPSTATE() {
 }
 
 uint8_t* uint8ToBinaryArray(uint8_t input) {
-    static uint8_t result[8]; //smallest size array of 8 bit
+    static uint8_t result[8] = {0, 0, 0, 0, 0, 0, 0, 0}; //smallest size array of 8 bit
     static int intInput = unsigned(input); // upscale type casting not too efficient but should work
-    for (int i = 7; i >= 0 || intInput != 0; i--) {
+    for (int i = 7; i >= 0 && intInput != 0; i--) {
         result[i] = ( intInput % 2 == 0) ? 1 : 0; 
         intInput /= 2;
     }
@@ -185,6 +185,39 @@ bool digitalRead(uint32_t slaveNumber, int8_t moduleIndex) {
     return ( unsigned(value[7 - (moduleIndex - 1)]) == 1 ) ? HIGH : LOW;
 }
 
+#define NSEC_PER_SEC 1000000000
+int64 toff, gl_delta; // time offset to calcualte linux RT cycle time
+int64 cycleCounter;
+
+/* add ns to timespec */
+void add_timespec(struct timespec *ts, int64 addtime) {
+   int64 sec, nsec;
+
+   nsec = addtime % NSEC_PER_SEC;
+   sec = (addtime - nsec) / NSEC_PER_SEC;
+   ts->tv_sec += sec;
+   ts->tv_nsec += nsec;
+   if ( ts->tv_nsec >= NSEC_PER_SEC )
+   {
+      nsec = ts->tv_nsec % NSEC_PER_SEC;
+      ts->tv_sec += (ts->tv_nsec - nsec) / NSEC_PER_SEC;
+      ts->tv_nsec = nsec;
+   }
+}
+
+/* PI calculation to get linux time synced to DC time */
+void ec_sync(int64 reftime, int64 cycletime , int64 *offsettime) {
+   static int64 integral = 0;
+   int64 delta;
+   /* set linux sync point 50us later than DC sync, just as example */
+   delta = (reftime - 50000) % cycletime;
+   if(delta> (cycletime / 2)) { delta= delta - cycletime; }
+   if(delta>0){ integral++; }
+   if(delta<0){ integral--; }
+   *offsettime = -(delta / 100) - (integral / 20);
+   gl_delta = delta;
+}
+
 OSAL_THREAD_FUNC_RT ecat_write_io() {
     bool turnonall = true;
     int i = 1;
@@ -205,11 +238,41 @@ OSAL_THREAD_FUNC_RT ecat_write_io() {
     }
 }
 
-OSAL_THREAD_FUNC_RT ecat_read_io() {
+OSAL_THREAD_FUNC_RT ecat_read_io(void *ptr) {
+    struct timespec   ts, tleft;
+    int ht;
+    int64 cycletime;
+    toff = 0;
+    cycleCounter = 0;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    ht = (ts.tv_nsec / 1000000) + 1; /* round to nearest ms */
+    ts.tv_nsec = ht * 1000000;
+    if (ts.tv_nsec >= NSEC_PER_SEC) {
+        ts.tv_sec++;
+        ts.tv_nsec -= NSEC_PER_SEC;
+    }
+    cycletime = *(int*)ptr * 1000; /* cycletime in ns */
     while (true) {
-        for (int i = 1; i <= 8; i++) {
+        /* calculate next cycle start */
+        add_timespec(&ts, cycletime + toff);
+        cout << cycletime << endl;
+        /* wait to cycle start */
+        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, &tleft);
+
+        cycleCounter++;
+        if (cycleCounter > 0) {
+            ec_receive_processdata(EC_TIMEOUTRET);
+            for (int i = 1; i <= 8; i++) {
+                printf("Value at bit %d is %d \n", i, digitalRead(tree_EL1008, i));
+            }
+
+            if (ec_slave[0].hasdc) {
+                /* calulate toff to get linux time and DC synced */
+                ec_sync(ec_DCtime, cycletime, &toff);
+            }
+
             ec_send_processdata();
-            printf("Value at bit %d is %d \n", i, digitalRead(tree_EL1008, i));
         }
     }
 }
@@ -243,13 +306,13 @@ int main(int argc, char* argv[]) { // argv[0] is the
     if ( !requestAllSlavesToOPSTATE() ) { return 0; };  // all slaves must be in 0x08 state -> OP STATE
 
     // 3. run simple program
-    ecat_read_rt_result = osal_thread_create_rt(&thread1, 4*stack64k, (void*)&ecat_read_io, (void*)&ctime);
-    if ( !ecat_read_rt_result ) {
+    ecat_write_rt_result = osal_thread_create_rt(&thread1, 4*stack64k, (void*)&ecat_write_io, (void*)&ctime);
+    if ( !ecat_write_rt_result ) {
         return 0;
     }
 
-    ecat_write_rt_result = osal_thread_create_rt(&thread2, 4*stack64k, (void*)&ecat_write_io, (void*)&ctime);
-    if ( !ecat_write_rt_result ) {
+    ecat_read_rt_result = osal_thread_create_rt(&thread2, 4*stack64k, (void*)&ecat_read_io, (void*)&ctime);
+    if ( !ecat_read_rt_result ) {
         return 0;
     }
 
