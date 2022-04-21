@@ -221,6 +221,7 @@ OSAL_THREAD_FUNC_RT ecat_read_io() {
 */
 
 int ecat_read_rt_result, ecat_write_rt_result;
+#define stack64k (64 * 1024)
 
 int main(int argc, char* argv[]) { // argv[0] is the 
     // 1. initialize slave devices on the specified ethernet port
@@ -242,12 +243,12 @@ int main(int argc, char* argv[]) { // argv[0] is the
     if ( !requestAllSlavesToOPSTATE() ) { return 0; };  // all slaves must be in 0x08 state -> OP STATE
 
     // 3. run simple program
-    ecat_read_rt_result = osal_thread_create_rt(&thread1, 1024, ecat_read_io, (void*)&ctime);
+    ecat_read_rt_result = osal_thread_create_rt(&thread1, 4*stack64k, (void*)&ecat_read_io, (void*)&ctime);
     if ( !ecat_read_rt_result ) {
         return 0;
     }
 
-    ecat_write_rt_result = osal_thread_create_rt(&thread2, 1024, ecat_write_io, (void*)&ctime);
+    ecat_write_rt_result = osal_thread_create_rt(&thread2, 4*stack64k, (void*)&ecat_write_io, (void*)&ctime);
     if ( !ecat_write_rt_result ) {
         return 0;
     }
