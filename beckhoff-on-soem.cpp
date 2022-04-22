@@ -7,6 +7,7 @@
 #include <soem/ethercat.h>
 #include <time.h>
 #include <pthread.h>
+#include <thread>
 #include <sys/time.h>
 #include <sched.h>
 
@@ -24,10 +25,12 @@ int predefinedSlaveList[NUMBER_OF_SLAVES] = {tree_EK1100, tree_EL1008, tree_EL20
 pthread_t thread1, thread2;
 
 // prog definitions
-bool requestSlaveInfo = false;;
+bool requestSlaveInfo = false;
 char ethName[1024];
 volatile int wkc;
 char IOmap[4096];
+
+int IOtoTrig = 1;
 
 // functions
 void waitForSlavesToReachSAFEOP() {
@@ -218,24 +221,44 @@ void ec_sync(int64 reftime, int64 cycletime , int64 *offsettime) {
    gl_delta = delta;
 }
 
-OSAL_THREAD_FUNC_RT ecat_write_io() {
+OSAL_THREAD_FUNC_RT ecat_write_io(void *ptr) {
     bool turnonall = true;
-    int i = 1;
-    ec_send_processdata();
-    while (true) {
-        turnonall = ( turnonall && (i < 9) ) || ( !turnonall && (i == 1) );
-        switch (turnonall) {
-        case true:  
-            digitalWrite(tree_EL2008, i, HIGH);
-            if (i < 8) { i++; };
-            break;            
-        case false:
-            digitalWrite(tree_EL2008, i, LOW);
-            if (i > 1) { i--; };
-            break;
-        }
-        ec_send_processdata();
+    struct timespec   ts, tleft;
+    int ht;
+    int64 cycletime;
+    toff = 0;
+    cycleCounter = 0;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    ht = (ts.tv_nsec / 1000000) + 1; /* round to nearest ms */
+    ts.tv_nsec = ht * 1000000;
+    if (ts.tv_nsec >= NSEC_PER_SEC) {
+        ts.tv_sec++;
+        ts.tv_nsec -= NSEC_PER_SEC;
     }
+    cycletime = *(int*)ptr * 1000; /* cycletime in ns */
+    // ec_send_processdata();
+    // while (true) {
+        /* calculate next cycle start */
+        add_timespec(&ts, cycletime + toff);
+        //cout << cycletime << endl;
+        /* wait to cycle start */
+        // clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, &tleft);
+        // cout << cycleCounter++ << endl;
+        // turnonall = ( turnonall && (i < 9) ) || ( !turnonall && (i == 1) );
+        // switch (turnonall) {
+        // case true:  
+        //     digitalWrite(tree_EL2008, i, HIGH);
+        //     if (i < 8) { i++; };
+        //     break;            
+        // case false:
+        //     digitalWrite(tree_EL2008, i, LOW);
+        //     if (i > 1) { i--; };
+        //     break;
+        // }
+        digitalWrite(tree_EL2008, IOtoTrig, HIGH);
+        ec_send_processdata();
+    // }
 }
 
 OSAL_THREAD_FUNC_RT ecat_read_io(void *ptr) {
@@ -286,6 +309,20 @@ OSAL_THREAD_FUNC_RT ecat_read_io(void *ptr) {
 int ecat_read_rt_result, ecat_write_rt_result;
 #define stack64k (64 * 1024)
 
+void *testWriteFunc(void* ptr) {
+    digitalWrite(tree_EL2008, IOtoTrig, HIGH);
+    ec_send_processdata();
+    pthread_exit(NULL);
+}
+
+void getUserInputFromKeyboard() {
+    printf("Set EL2008 HIGH at: ");
+    // cin >> IOtoTrig;
+    // IOtoTrig -= 48;
+}
+
+std::thread keyboardThread(getUserInputFromKeyboard);
+
 int main(int argc, char* argv[]) { // argv[0] is the 
     // 1. initialize slave devices on the specified ethernet port
     int ctime = 1000; // 1000us = 1ms
@@ -306,15 +343,21 @@ int main(int argc, char* argv[]) { // argv[0] is the
     if ( !requestAllSlavesToOPSTATE() ) { return 0; };  // all slaves must be in 0x08 state -> OP STATE
 
     // 3. run simple program
-    ecat_write_rt_result = osal_thread_create_rt(&thread1, 4*stack64k, (void*)&ecat_write_io, (void*)&ctime);
-    if ( !ecat_write_rt_result ) {
-        return 0;
+    while (true) {
+        // ecat_write_rt_result = osal_thread_create_rt(&thread1, 4*stack64k, (void*)&ecat_write_io, (void*)&ctime);
+        // if ( !ecat_write_rt_result ) {
+        //     return 0;
+        // }
+        keyboardThread.join();
+        keyboardThread.detach();
+        ecat_write_rt_result = pthread_create(&thread1, NULL, testWriteFunc, (void *)1);
     }
+    
 
-    ecat_read_rt_result = osal_thread_create_rt(&thread2, 4*stack64k, (void*)&ecat_read_io, (void*)&ctime);
-    if ( !ecat_read_rt_result ) {
-        return 0;
-    }
+    // ecat_read_rt_result = osal_thread_create_rt(&thread2, 4*stack64k, (void*)&ecat_read_io, (void*)&ctime);
+    // if ( !ecat_read_rt_result ) {
+    //     return 0;
+    // }
 
     return 0;
 }
